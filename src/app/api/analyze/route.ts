@@ -45,7 +45,7 @@ When given a food image, respond ONLY with a valid JSON object in this exact str
 
 export async function POST(request: NextRequest) {
   try {
-    const { image, mediaType, mealContext } = await request.json();
+    const { image, mediaType, mealContext, ingredients } = await request.json();
 
     if (!image) {
       return NextResponse.json(
@@ -60,6 +60,14 @@ export async function POST(request: NextRequest) {
         { error: "API key not configured" },
         { status: 500 }
       );
+    }
+
+    // Build the user message text
+    let userText = `Meal context: ${mealContext || "not specified"}`;
+
+    // If ingredients are provided, instruct the model to use them
+    if (ingredients && Array.isArray(ingredients) && ingredients.length > 0) {
+      userText += `\n\nThe user has confirmed/corrected the ingredients in this meal. Use this exact list of ingredients for your analysis (do not add or remove items): ${ingredients.join(", ")}`;
     }
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -87,7 +95,7 @@ export async function POST(request: NextRequest) {
               },
               {
                 type: "text",
-                text: `Meal context: ${mealContext || "not specified"}`,
+                text: userText,
               },
             ],
           },

@@ -4,12 +4,20 @@ import { useState, useRef } from "react";
 import { NutritionData, MealContext, MEAL_CONTEXTS } from "@/types/nutrition";
 import ResultsCard from "@/components/ResultsCard";
 
+interface ImageData {
+  base64: string;
+  mediaType: string;
+  preview: string;
+}
+
 export default function Home() {
   const [selectedContext, setSelectedContext] =
     useState<MealContext>("just-curious");
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageData, setImageData] = useState<ImageData | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isReanalyzing, setIsReanalyzing] = useState(false);
   const [results, setResults] = useState<NutritionData | null>(null);
+  const [ingredients, setIngredients] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -27,19 +35,17 @@ export default function Home() {
 
     // Compress and convert to base64
     try {
-      const compressedBase64 = await compressAndConvertImage(file);
-      setImagePreview(compressedBase64.preview);
+      const compressedData = await compressAndConvertImage(file);
+      setImageData(compressedData);
 
       // Automatically start analysis
-      await analyzeImage(compressedBase64.data, compressedBase64.mediaType);
+      await analyzeImage(compressedData.base64, compressedData.mediaType);
     } catch {
       setError("Failed to process image. Please try again.");
     }
   };
 
-  const compressAndConvertImage = (
-    file: File
-  ): Promise<{ data: string; preview: string; mediaType: string }> => {
+  const compressAndConvertImage = (file: File): Promise<ImageData> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -72,7 +78,7 @@ export default function Home() {
           const base64Data = dataUrl.split(",")[1];
 
           resolve({
-            data: base64Data,
+            base64: base64Data,
             preview: dataUrl,
             mediaType: "image/jpeg",
           });
@@ -85,8 +91,16 @@ export default function Home() {
     });
   };
 
-  const analyzeImage = async (base64Data: string, mediaType: string) => {
-    setIsAnalyzing(true);
+  const analyzeImage = async (
+    base64Data: string,
+    mediaType: string,
+    ingredientsList?: string[]
+  ) => {
+    if (ingredientsList) {
+      setIsReanalyzing(true);
+    } else {
+      setIsAnalyzing(true);
+    }
     setError(null);
 
     try {
@@ -99,6 +113,7 @@ export default function Home() {
           image: base64Data,
           mediaType: mediaType,
           mealContext: selectedContext,
+          ingredients: ingredientsList,
         }),
       });
 
@@ -109,16 +124,28 @@ export default function Home() {
 
       const data = await response.json();
       setResults(data);
+
+      // Update ingredients from results (only on initial analysis)
+      if (!ingredientsList) {
+        setIngredients(data.foods_identified || []);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsAnalyzing(false);
+      setIsReanalyzing(false);
     }
   };
 
+  const handleReanalyze = () => {
+    if (!imageData) return;
+    analyzeImage(imageData.base64, imageData.mediaType, ingredients);
+  };
+
   const handleReset = () => {
-    setImagePreview(null);
+    setImageData(null);
     setResults(null);
+    setIngredients([]);
     setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -141,17 +168,24 @@ export default function Home() {
           </header>
 
           {/* Image Preview */}
-          {imagePreview && (
+          {imageData && (
             <div className="mb-4 rounded-2xl overflow-hidden">
               <img
-                src={imagePreview}
+                src={imageData.preview}
                 alt="Your meal"
                 className="w-full h-48 object-cover"
               />
             </div>
           )}
 
-          <ResultsCard data={results} onReset={handleReset} />
+          <ResultsCard
+            data={results}
+            ingredients={ingredients}
+            onIngredientsUpdate={setIngredients}
+            onReanalyze={handleReanalyze}
+            isReanalyzing={isReanalyzing}
+            onReset={handleReset}
+          />
         </div>
       </div>
     );
@@ -172,10 +206,10 @@ export default function Home() {
           {/* Loading State */}
           {isAnalyzing ? (
             <div className="text-center space-y-4">
-              {imagePreview && (
+              {imageData && (
                 <div className="rounded-2xl overflow-hidden mb-6">
                   <img
-                    src={imagePreview}
+                    src={imageData.preview}
                     alt="Your meal"
                     className="w-full h-64 object-cover"
                   />

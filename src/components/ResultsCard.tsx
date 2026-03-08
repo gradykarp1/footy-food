@@ -2,13 +2,25 @@
 
 import { NutritionData } from "@/types/nutrition";
 import MacroChart from "./MacroChart";
+import IngredientsEditor from "./IngredientsEditor";
 
 interface ResultsCardProps {
   data: NutritionData;
+  ingredients: string[];
+  onIngredientsUpdate: (ingredients: string[]) => void;
+  onReanalyze: () => void;
+  isReanalyzing: boolean;
   onReset: () => void;
 }
 
-export default function ResultsCard({ data, onReset }: ResultsCardProps) {
+export default function ResultsCard({
+  data,
+  ingredients,
+  onIngredientsUpdate,
+  onReanalyze,
+  isReanalyzing,
+  onReset,
+}: ResultsCardProps) {
   const { score, out_of, summary } = data.soccer_performance_rating;
 
   return (
@@ -18,9 +30,6 @@ export default function ResultsCard({ data, onReset }: ResultsCardProps) {
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-xl font-bold">{data.meal_title}</h2>
-            <p className="text-muted text-sm mt-1">
-              {data.foods_identified.join(", ")}
-            </p>
           </div>
           <div className="flex flex-col items-center">
             <div className="text-3xl font-bold text-accent">
@@ -45,6 +54,14 @@ export default function ResultsCard({ data, onReset }: ResultsCardProps) {
           </span>
         </div>
       </div>
+
+      {/* Editable Ingredients */}
+      <IngredientsEditor
+        ingredients={ingredients}
+        onUpdate={onIngredientsUpdate}
+        onReanalyze={onReanalyze}
+        isAnalyzing={isReanalyzing}
+      />
 
       {/* Calories */}
       <div className="bg-card border border-card-border rounded-2xl p-4">

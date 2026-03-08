@@ -1,65 +1,273 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useRef } from "react";
+import { NutritionData, MealContext, MEAL_CONTEXTS } from "@/types/nutrition";
+import ResultsCard from "@/components/ResultsCard";
 
 export default function Home() {
+  const [selectedContext, setSelectedContext] =
+    useState<MealContext>("just-curious");
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [results, setResults] = useState<NutritionData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError(null);
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file");
+      return;
+    }
+
+    // Compress and convert to base64
+    try {
+      const compressedBase64 = await compressAndConvertImage(file);
+      setImagePreview(compressedBase64.preview);
+
+      // Automatically start analysis
+      await analyzeImage(compressedBase64.data, compressedBase64.mediaType);
+    } catch {
+      setError("Failed to process image. Please try again.");
+    }
+  };
+
+  const compressAndConvertImage = (
+    file: File
+  ): Promise<{ data: string; preview: string; mediaType: string }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // Create canvas for compression
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Could not get canvas context"));
+            return;
+          }
+
+          // Resize to max 1024px width while maintaining aspect ratio
+          const maxWidth = 1024;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to base64 (JPEG for better compression)
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          const base64Data = dataUrl.split(",")[1];
+
+          resolve({
+            data: base64Data,
+            preview: dataUrl,
+            mediaType: "image/jpeg",
+          });
+        };
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const analyzeImage = async (base64Data: string, mediaType: string) => {
+    setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image: base64Data,
+          mediaType: mediaType,
+          mealContext: selectedContext,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to analyze image");
+      }
+
+      const data = await response.json();
+      setResults(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleReset = () => {
+    setImagePreview(null);
+    setResults(null);
+    setError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Show results view
+  if (results) {
+    return (
+      <div className="min-h-dvh bg-background">
+        <div className="max-w-md mx-auto px-4 py-6">
+          {/* Header */}
+          <header className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-foreground">Footy Food</h1>
+            <p className="text-sm text-muted">Your Personal Nutrition Coach</p>
+          </header>
+
+          {/* Image Preview */}
+          {imagePreview && (
+            <div className="mb-4 rounded-2xl overflow-hidden">
+              <img
+                src={imagePreview}
+                alt="Your meal"
+                className="w-full h-48 object-cover"
+              />
+            </div>
+          )}
+
+          <ResultsCard data={results} onReset={handleReset} />
+        </div>
+      </div>
+    );
+  }
+
+  // Main capture view
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="min-h-dvh bg-background flex flex-col">
+      <div className="max-w-md mx-auto px-4 py-6 flex-1 flex flex-col">
+        {/* Header */}
+        <header className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-foreground">Footy Food</h1>
+          <p className="text-muted mt-1">Your Personal Nutrition Coach</p>
+        </header>
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col justify-center">
+          {/* Loading State */}
+          {isAnalyzing ? (
+            <div className="text-center space-y-4">
+              {imagePreview && (
+                <div className="rounded-2xl overflow-hidden mb-6">
+                  <img
+                    src={imagePreview}
+                    alt="Your meal"
+                    className="w-full h-64 object-cover"
+                  />
+                </div>
+              )}
+              <div className="flex justify-center">
+                <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+              </div>
+              <p className="text-muted">Analyzing your meal...</p>
+            </div>
+          ) : (
+            <>
+              {/* Camera Button */}
+              <div className="text-center mb-8">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleImageSelect}
+                  className="sr-only"
+                  aria-label="Take photo or select from library"
+                />
+                <button
+                  onClick={triggerFileInput}
+                  className="w-32 h-32 rounded-full bg-accent hover:bg-accent-muted transition-colors flex items-center justify-center mx-auto shadow-lg shadow-accent/20"
+                  aria-label="Capture meal photo"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-12 h-12 text-background"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
+                    />
+                  </svg>
+                </button>
+                <p className="mt-4 text-muted">
+                  Tap to photograph your meal
+                </p>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 text-center">
+                  <p className="text-red-400 text-sm">{error}</p>
+                </div>
+              )}
+
+              {/* Context Selector */}
+              <div className="space-y-3">
+                <p className="text-sm text-muted text-center">
+                  What&apos;s this meal for?
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {MEAL_CONTEXTS.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => setSelectedContext(value)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                        selectedContext === value
+                          ? "bg-accent text-background"
+                          : "bg-card border border-card-border text-foreground hover:bg-card-border"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <footer className="text-center pt-8">
+          <p className="text-xs text-muted">
+            Powered by AI vision analysis
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        </footer>
+      </div>
     </div>
   );
 }

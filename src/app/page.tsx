@@ -164,10 +164,18 @@ export default function Home() {
   };
 
   const saveMealToHistory = async (nutritionData: NutritionData) => {
-    if (!imageData || hasSavedCurrentMeal) return;
+    console.log("saveMealToHistory called");
+    console.log("imageData exists:", !!imageData);
+    console.log("hasSavedCurrentMeal:", hasSavedCurrentMeal);
+
+    if (!imageData || hasSavedCurrentMeal) {
+      console.log("Skipping save - condition not met");
+      return;
+    }
 
     try {
       const thumbnail = await createThumbnail(imageData.preview);
+      console.log("Thumbnail created");
 
       const entry: MealHistoryEntry = {
         id: `meal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -177,16 +185,23 @@ export default function Home() {
         nutritionData,
       };
 
+      console.log("Sending POST to /api/history");
       const response = await fetch("/api/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entry),
       });
 
+      console.log("Response status:", response.status);
+
       if (response.ok) {
+        console.log("Save successful");
         setHasSavedCurrentMeal(true);
         // Add to local history state
         setHistory((prev) => [entry, ...prev]);
+      } else {
+        const errorData = await response.json();
+        console.error("Save failed:", errorData);
       }
     } catch (err) {
       console.error("Failed to save meal:", err);

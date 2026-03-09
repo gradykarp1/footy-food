@@ -44,8 +44,13 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  console.log("POST /api/history called");
+  console.log("redisUrl exists:", !!redisUrl);
+  console.log("redisToken exists:", !!redisToken);
+
   try {
     if (!redisUrl || !redisToken) {
+      console.log("Database not configured - missing credentials");
       return NextResponse.json(
         { error: "Database not configured" },
         { status: 500 }
@@ -53,9 +58,11 @@ export async function POST(request: NextRequest) {
     }
 
     const entry: MealHistoryEntry = await request.json();
+    console.log("Received entry with id:", entry.id);
 
     // Validate entry
     if (!entry.id || !entry.timestamp || !entry.nutritionData) {
+      console.log("Invalid entry - missing required fields");
       return NextResponse.json(
         { error: "Invalid meal entry" },
         { status: 400 }
@@ -63,7 +70,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Add to beginning of list (most recent first)
+    console.log("Attempting to save to Redis...");
     await redis.lpush(HISTORY_KEY, entry);
+    console.log("Saved to Redis successfully");
 
     // Trim to max items
     await redis.ltrim(HISTORY_KEY, 0, MAX_HISTORY_ITEMS - 1);
@@ -72,7 +81,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Failed to save meal:", error);
     return NextResponse.json(
-      { error: "Failed to save meal" },
+      { error: "Failed to save meal", details: String(error) },
       { status: 500 }
     );
   }

@@ -56,3 +56,11 @@ export const MEAL_CONTEXTS: { value: MealContext; label: string }[] = [
   { value: "rest-day", label: "Rest Day" },
   { value: "just-curious", label: "Just Curious" },
 ];
+
+export interface MealHistoryEntry {
+  id: string;
+  timestamp: number;
+  mealContext: MealContext;
+  imagePreview?: string; // Small thumbnail, optional to save space
+  nutritionData: NutritionData;
+}

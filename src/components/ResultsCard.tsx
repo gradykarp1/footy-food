@@ -11,6 +11,7 @@ interface ResultsCardProps {
   onReanalyze: () => void;
   isReanalyzing: boolean;
   onReset: () => void;
+  isViewingHistory?: boolean;
 }
 
 export default function ResultsCard({
@@ -20,6 +21,7 @@ export default function ResultsCard({
   onReanalyze,
   isReanalyzing,
   onReset,
+  isViewingHistory = false,
 }: ResultsCardProps) {
   const { score, out_of, summary } = data.soccer_performance_rating;
 
@@ -55,13 +57,29 @@ export default function ResultsCard({
         </div>
       </div>
 
-      {/* Editable Ingredients */}
-      <IngredientsEditor
-        ingredients={ingredients}
-        onUpdate={onIngredientsUpdate}
-        onReanalyze={onReanalyze}
-        isAnalyzing={isReanalyzing}
-      />
+      {/* Ingredients - editable only for new analysis, read-only for history */}
+      {isViewingHistory ? (
+        <div className="bg-card border border-card-border rounded-2xl p-4">
+          <h3 className="text-sm font-medium text-muted mb-3">Ingredients</h3>
+          <div className="flex flex-wrap gap-2">
+            {ingredients.map((item, index) => (
+              <span
+                key={index}
+                className="px-3 py-1.5 rounded-full text-sm bg-background/50"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <IngredientsEditor
+          ingredients={ingredients}
+          onUpdate={onIngredientsUpdate}
+          onReanalyze={onReanalyze}
+          isAnalyzing={isReanalyzing}
+        />
+      )}
 
       {/* Calories */}
       <div className="bg-card border border-card-border rounded-2xl p-4">

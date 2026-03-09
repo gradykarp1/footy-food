@@ -1,9 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { NutritionData, MealContext, MEAL_CONTEXTS } from "@/types/nutrition";
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  NutritionData,
+  MealContext,
+  MEAL_CONTEXTS,
+  MealHistoryEntry,
+} from "@/types/nutrition";
 import ResultsCard from "@/components/ResultsCard";
 import LoginForm from "@/components/LoginForm";
+import MealHistory from "@/components/MealHistory";
 
 interface ImageData {
   base64: string;
@@ -21,6 +27,11 @@ export default function Home() {
   const [results, setResults] = useState<NutritionData | null>(null);
   const [ingredients, setIngredients] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<MealHistoryEntry[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [viewingHistoryEntry, setViewingHistoryEntry] =
+    useState<MealHistoryEntry | null>(null);
+  const [hasSavedCurrentMeal, setHasSavedCurrentMeal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Check auth status on mount
@@ -28,6 +39,25 @@ export default function Home() {
     const authStatus = localStorage.getItem("footy-food-auth");
     setIsAuthenticated(authStatus === "true");
   }, []);
+
+  // Fetch history when authenticated
+  const fetchHistory = useCallback(async () => {
+    try {
+      const response = await fetch("/api/history");
+      if (response.ok) {
+        const data = await response.json();
+        setHistory(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch history:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchHistory();
+    }
+  }, [isAuthenticated, fetchHistory]);
 
   const handleLogin = () => {
     setIsAuthenticated(true);
@@ -38,6 +68,7 @@ export default function Home() {
     if (!file) return;
 
     setError(null);
+    setHasSavedCurrentMeal(false);
 
     // Validate file type
     if (!file.type.startsWith("image/")) {
@@ -103,6 +134,65 @@ export default function Home() {
     });
   };
 
+  const createThumbnail = (dataUrl: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve("");
+          return;
+        }
+
+        // Create a small thumbnail (64px)
+        const size = 64;
+        canvas.width = size;
+        canvas.height = size;
+
+        // Center crop
+        const minDim = Math.min(img.width, img.height);
+        const sx = (img.width - minDim) / 2;
+        const sy = (img.height - minDim) / 2;
+
+        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+        resolve(canvas.toDataURL("image/jpeg", 0.6));
+      };
+      img.onerror = () => resolve("");
+      img.src = dataUrl;
+    });
+  };
+
+  const saveMealToHistory = async (nutritionData: NutritionData) => {
+    if (!imageData || hasSavedCurrentMeal) return;
+
+    try {
+      const thumbnail = await createThumbnail(imageData.preview);
+
+      const entry: MealHistoryEntry = {
+        id: `meal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        mealContext: selectedContext,
+        imagePreview: thumbnail,
+        nutritionData,
+      };
+
+      const response = await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+
+      if (response.ok) {
+        setHasSavedCurrentMeal(true);
+        // Add to local history state
+        setHistory((prev) => [entry, ...prev]);
+      }
+    } catch (err) {
+      console.error("Failed to save meal:", err);
+    }
+  };
+
   const analyzeImage = async (
     base64Data: string,
     mediaType: string,
@@ -140,6 +230,8 @@ export default function Home() {
       // Update ingredients from results (only on initial analysis)
       if (!ingredientsList) {
         setIngredients(data.foods_identified || []);
+        // Save to history on initial analysis
+        saveMealToHistory(data);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -159,9 +251,33 @@ export default function Home() {
     setResults(null);
     setIngredients([]);
     setError(null);
+    setViewingHistoryEntry(null);
+    setHasSavedCurrentMeal(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const handleDeleteMeal = async (id: string) => {
+    try {
+      const response = await fetch(`/api/history?id=${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setHistory((prev) => prev.filter((entry) => entry.id !== id));
+      }
+    } catch (err) {
+      console.error("Failed to delete meal:", err);
+    }
+  };
+
+  const handleSelectHistoryMeal = (entry: MealHistoryEntry) => {
+    setViewingHistoryEntry(entry);
+    setResults(entry.nutritionData);
+    setIngredients(entry.nutritionData.foods_identified || []);
+    setSelectedContext(entry.mealContext);
+    setShowHistory(false);
   };
 
   const triggerFileInput = () => {
@@ -182,6 +298,18 @@ export default function Home() {
     return <LoginForm onSuccess={handleLogin} />;
   }
 
+  // Show history view
+  if (showHistory) {
+    return (
+      <MealHistory
+        history={history}
+        onSelectMeal={handleSelectHistoryMeal}
+        onDeleteMeal={handleDeleteMeal}
+        onClose={() => setShowHistory(false)}
+      />
+    );
+  }
+
   // Show results view
   if (results) {
     return (
@@ -194,10 +322,10 @@ export default function Home() {
           </header>
 
           {/* Image Preview */}
-          {imageData && (
+          {(imageData || viewingHistoryEntry?.imagePreview) && (
             <div className="mb-4 rounded-2xl overflow-hidden">
               <img
-                src={imageData.preview}
+                src={imageData?.preview || viewingHistoryEntry?.imagePreview}
                 alt="Your meal"
                 className="w-full h-48 object-cover"
               />
@@ -211,6 +339,7 @@ export default function Home() {
             onReanalyze={handleReanalyze}
             isReanalyzing={isReanalyzing}
             onReset={handleReset}
+            isViewingHistory={!!viewingHistoryEntry}
           />
         </div>
       </div>
@@ -220,11 +349,39 @@ export default function Home() {
   // Main capture view
   return (
     <div className="min-h-dvh bg-background flex flex-col">
-      <div className="max-w-md mx-auto px-4 py-6 flex-1 flex flex-col">
-        {/* Header */}
-        <header className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-foreground">Footy Food</h1>
-          <p className="text-muted mt-1">Your Personal Nutrition Coach</p>
+      <div className="max-w-md mx-auto px-4 py-6 flex-1 flex flex-col w-full">
+        {/* Header with History Button */}
+        <header className="flex items-center justify-between mb-8">
+          <div className="w-10" /> {/* Spacer for centering */}
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-foreground">Footy Food</h1>
+            <p className="text-muted mt-1">Your Personal Nutrition Coach</p>
+          </div>
+          <button
+            onClick={() => setShowHistory(true)}
+            className="w-10 h-10 flex items-center justify-center text-muted hover:text-foreground transition-colors"
+            aria-label="View meal history"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="w-6 h-6"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            {history.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-accent text-background text-xs font-bold rounded-full flex items-center justify-center">
+                {history.length > 99 ? "99+" : history.length}
+              </span>
+            )}
+          </button>
         </header>
 
         {/* Main Content */}
@@ -284,9 +441,7 @@ export default function Home() {
                     />
                   </svg>
                 </button>
-                <p className="mt-4 text-muted">
-                  Tap to photograph your meal
-                </p>
+                <p className="mt-4 text-muted">Tap to photograph your meal</p>
               </div>
 
               {/* Error Message */}
@@ -323,9 +478,7 @@ export default function Home() {
 
         {/* Footer */}
         <footer className="text-center pt-8">
-          <p className="text-xs text-muted">
-            Powered by AI vision analysis
-          </p>
+          <p className="text-xs text-muted">Powered by AI vision analysis</p>
         </footer>
       </div>
     </div>

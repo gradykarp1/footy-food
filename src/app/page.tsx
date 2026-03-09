@@ -82,7 +82,7 @@ export default function Home() {
       setImageData(compressedData);
 
       // Automatically start analysis
-      await analyzeImage(compressedData.base64, compressedData.mediaType);
+      await analyzeImage(compressedData);
     } catch {
       setError("Failed to process image. Please try again.");
     }
@@ -163,19 +163,14 @@ export default function Home() {
     });
   };
 
-  const saveMealToHistory = async (nutritionData: NutritionData) => {
-    console.log("saveMealToHistory called");
-    console.log("imageData exists:", !!imageData);
-    console.log("hasSavedCurrentMeal:", hasSavedCurrentMeal);
-
-    if (!imageData || hasSavedCurrentMeal) {
-      console.log("Skipping save - condition not met");
-      return;
-    }
+  const saveMealToHistory = async (
+    nutritionData: NutritionData,
+    imgData: ImageData
+  ) => {
+    if (hasSavedCurrentMeal) return;
 
     try {
-      const thumbnail = await createThumbnail(imageData.preview);
-      console.log("Thumbnail created");
+      const thumbnail = await createThumbnail(imgData.preview);
 
       const entry: MealHistoryEntry = {
         id: `meal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -185,19 +180,14 @@ export default function Home() {
         nutritionData,
       };
 
-      console.log("Sending POST to /api/history");
       const response = await fetch("/api/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entry),
       });
 
-      console.log("Response status:", response.status);
-
       if (response.ok) {
-        console.log("Save successful");
         setHasSavedCurrentMeal(true);
-        // Add to local history state
         setHistory((prev) => [entry, ...prev]);
       } else {
         const errorData = await response.json();
@@ -209,8 +199,7 @@ export default function Home() {
   };
 
   const analyzeImage = async (
-    base64Data: string,
-    mediaType: string,
+    imgData: ImageData,
     ingredientsList?: string[]
   ) => {
     if (ingredientsList) {
@@ -227,8 +216,8 @@ export default function Home() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          image: base64Data,
-          mediaType: mediaType,
+          image: imgData.base64,
+          mediaType: imgData.mediaType,
           mealContext: selectedContext,
           ingredients: ingredientsList,
         }),
@@ -246,7 +235,7 @@ export default function Home() {
       if (!ingredientsList) {
         setIngredients(data.foods_identified || []);
         // Save to history on initial analysis
-        saveMealToHistory(data);
+        saveMealToHistory(data, imgData);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -258,7 +247,7 @@ export default function Home() {
 
   const handleReanalyze = () => {
     if (!imageData) return;
-    analyzeImage(imageData.base64, imageData.mediaType, ingredients);
+    analyzeImage(imageData, ingredients);
   };
 
   const handleReset = () => {

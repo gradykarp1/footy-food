@@ -315,10 +315,38 @@ export default function Home() {
     return (
       <div className="min-h-dvh bg-background">
         <div className="max-w-md mx-auto px-4 py-6">
-          {/* Header */}
-          <header className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-foreground">Footy Food</h1>
-            <p className="text-sm text-muted">Your Personal Nutrition Coach</p>
+          {/* Header with History Button */}
+          <header className="flex items-center justify-between mb-6">
+            <div className="w-10" />
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-foreground">Footy Food</h1>
+              <p className="text-sm text-muted">Your Personal Nutrition Coach</p>
+            </div>
+            <button
+              onClick={() => setShowHistory(true)}
+              className="relative w-10 h-10 flex items-center justify-center text-muted hover:text-foreground transition-colors"
+              aria-label="View meal history"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-6 h-6"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              {history.length > 0 && (
+                <span className="absolute -top-0 -right-0 w-5 h-5 bg-accent text-background text-xs font-bold rounded-full flex items-center justify-center">
+                  {history.length > 99 ? "99+" : history.length}
+                </span>
+              )}
+            </button>
           </header>
 
           {/* Image Preview */}
@@ -359,7 +387,7 @@ export default function Home() {
           </div>
           <button
             onClick={() => setShowHistory(true)}
-            className="w-10 h-10 flex items-center justify-center text-muted hover:text-foreground transition-colors"
+            className="relative w-10 h-10 flex items-center justify-center text-muted hover:text-foreground transition-colors"
             aria-label="View meal history"
           >
             <svg
@@ -377,7 +405,7 @@ export default function Home() {
               />
             </svg>
             {history.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-accent text-background text-xs font-bold rounded-full flex items-center justify-center">
+              <span className="absolute -top-0 -right-0 w-5 h-5 bg-accent text-background text-xs font-bold rounded-full flex items-center justify-center">
                 {history.length > 99 ? "99+" : history.length}
               </span>
             )}

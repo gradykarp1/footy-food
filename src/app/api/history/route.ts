@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import { MealHistoryEntry } from "@/types/nutrition";
 
-// Get Redis credentials (support both Vercel KV and Upstash naming conventions)
-const redisUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
-const redisToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
+// Get Redis credentials (support multiple naming conventions)
+const redisUrl =
+  process.env.footy_food_KV_REST_API_URL ||
+  process.env.KV_REST_API_URL ||
+  process.env.UPSTASH_REDIS_REST_URL ||
+  "";
+const redisToken =
+  process.env.footy_food_KV_REST_API_TOKEN ||
+  process.env.KV_REST_API_TOKEN ||
+  process.env.UPSTASH_REDIS_REST_TOKEN ||
+  "";
 
 // Initialize Redis client
 const redis = new Redis({

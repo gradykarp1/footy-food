@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { NutritionData, MealContext, MEAL_CONTEXTS } from "@/types/nutrition";
 import ResultsCard from "@/components/ResultsCard";
+import LoginForm from "@/components/LoginForm";
 
 interface ImageData {
   base64: string;
@@ -11,6 +12,7 @@ interface ImageData {
 }
 
 export default function Home() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [selectedContext, setSelectedContext] =
     useState<MealContext>("just-curious");
   const [imageData, setImageData] = useState<ImageData | null>(null);
@@ -20,6 +22,16 @@ export default function Home() {
   const [ingredients, setIngredients] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check auth status on mount
+  useEffect(() => {
+    const authStatus = localStorage.getItem("footy-food-auth");
+    setIsAuthenticated(authStatus === "true");
+  }, []);
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -155,6 +167,20 @@ export default function Home() {
   const triggerFileInput = () => {
     fileInputRef.current?.click();
   };
+
+  // Loading state while checking auth
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show login form if not authenticated
+  if (!isAuthenticated) {
+    return <LoginForm onSuccess={handleLogin} />;
+  }
 
   // Show results view
   if (results) {

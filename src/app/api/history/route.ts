@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import { MealHistoryEntry } from "@/types/nutrition";
 
+// Get Redis credentials (support both Vercel KV and Upstash naming conventions)
+const redisUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
+const redisToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
+
 // Initialize Redis client
 const redis = new Redis({
-  url: process.env.KV_REST_API_URL || "",
-  token: process.env.KV_REST_API_TOKEN || "",
+  url: redisUrl,
+  token: redisToken,
 });
 
 const HISTORY_KEY = "meal-history";
@@ -13,7 +17,7 @@ const MAX_HISTORY_ITEMS = 100;
 
 export async function GET() {
   try {
-    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (!redisUrl || !redisToken) {
       return NextResponse.json(
         { error: "Database not configured" },
         { status: 500 }
@@ -33,7 +37,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (!redisUrl || !redisToken) {
       return NextResponse.json(
         { error: "Database not configured" },
         { status: 500 }
@@ -68,7 +72,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (!redisUrl || !redisToken) {
       return NextResponse.json(
         { error: "Database not configured" },
         { status: 500 }

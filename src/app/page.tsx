@@ -323,10 +323,10 @@ export default function Home() {
           {/* Header with History Button */}
           <header className="flex items-center justify-between mb-6">
             <div className="w-10" />
-            <div className="text-center">
+            <button onClick={handleReset} className="text-center">
               <h1 className="text-2xl font-bold text-foreground">Footy Food</h1>
               <p className="text-sm text-muted">Your Personal Nutrition Coach</p>
-            </div>
+            </button>
             <button
               onClick={() => setShowHistory(true)}
               className="relative w-10 h-10 flex items-center justify-center text-muted hover:text-foreground transition-colors"

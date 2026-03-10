@@ -66,25 +66,16 @@ export default function DailySummary({ meals }: DailySummaryProps) {
       {/* Macros row */}
       <div className="flex justify-between text-sm">
         <div className="text-center">
-          <div className="flex items-center gap-1.5 justify-center">
-            <div className="w-2 h-2 rounded-full bg-blue-500" />
-            <span className="font-medium">{Math.round(totals.protein)}g</span>
-          </div>
-          <span className="text-xs text-muted">Protein</span>
+          <span className="font-medium">{Math.round(totals.protein)}g</span>
+          <span className="text-xs text-muted block">Protein</span>
         </div>
         <div className="text-center">
-          <div className="flex items-center gap-1.5 justify-center">
-            <div className="w-2 h-2 rounded-full bg-green-500" />
-            <span className="font-medium">{Math.round(totals.carbs)}g</span>
-          </div>
-          <span className="text-xs text-muted">Carbs</span>
+          <span className="font-medium">{Math.round(totals.carbs)}g</span>
+          <span className="text-xs text-muted block">Carbs</span>
         </div>
         <div className="text-center">
-          <div className="flex items-center gap-1.5 justify-center">
-            <div className="w-2 h-2 rounded-full bg-yellow-500" />
-            <span className="font-medium">{Math.round(totals.fat)}g</span>
-          </div>
-          <span className="text-xs text-muted">Fat</span>
+          <span className="font-medium">{Math.round(totals.fat)}g</span>
+          <span className="text-xs text-muted block">Fat</span>
         </div>
       </div>
     </div>

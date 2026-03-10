@@ -171,18 +171,9 @@ export default function MealHistory({
                   {/* Daily Totals */}
                   <div className="flex gap-4 mt-1 text-xs text-muted">
                     <span>{Math.round(group.totals.calories)} kcal</span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                      {Math.round(group.totals.protein)}g
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                      {Math.round(group.totals.carbs)}g
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-                      {Math.round(group.totals.fat)}g
-                    </span>
+                    <span>{Math.round(group.totals.protein)}g protein</span>
+                    <span>{Math.round(group.totals.carbs)}g carbs</span>
+                    <span>{Math.round(group.totals.fat)}g fat</span>
                   </div>
                 </div>
 

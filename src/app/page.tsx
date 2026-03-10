@@ -10,6 +10,7 @@ import {
 import ResultsCard from "@/components/ResultsCard";
 import LoginForm from "@/components/LoginForm";
 import MealHistory from "@/components/MealHistory";
+import DailySummary from "@/components/DailySummary";
 
 interface ImageData {
   base64: string;
@@ -437,6 +438,9 @@ export default function Home() {
             </div>
           ) : (
             <>
+              {/* Daily Summary */}
+              <DailySummary meals={history} />
+
               {/* Camera Button */}
               <div className="text-center mb-8">
                 <input

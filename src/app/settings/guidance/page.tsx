@@ -90,7 +90,22 @@ export default function GuidancePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ documentId: id }),
         });
-        const body = await res.json();
+
+        // A function timeout returns a plain-text error page, not JSON. Reading
+        // it as JSON turns "the chunk took too long" into an unreadable parse
+        // error, so decode defensively and say what actually happened.
+        const raw = await res.text();
+        let body: { done?: boolean; error?: string };
+        try {
+          body = JSON.parse(raw);
+        } catch {
+          throw new Error(
+            res.status === 504 || /timed out|TIMEOUT/i.test(raw)
+              ? "That chunk exceeded the server time limit. Press Resume — pages already read are saved."
+              : `Server returned ${res.status}. ${raw.slice(0, 200)}`
+          );
+        }
+
         if (!res.ok) throw new Error(body.error || "Extraction failed");
         await refresh();
         if (body.done) break;

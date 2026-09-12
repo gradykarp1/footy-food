@@ -156,7 +156,14 @@ export default function GuidancePage() {
       <div className="max-w-md mx-auto px-4 py-6">
         <AppHeader historyCount={0} showHistoryLink={false} />
 
-        <div className="mb-6">
+        <Link
+          href="/settings"
+          className="text-xs text-muted hover:text-foreground transition-colors"
+        >
+          ← Settings
+        </Link>
+
+        <div className="mb-6 mt-2">
           <h2 className="text-2xl font-bold text-foreground">Guidance</h2>
           <p className="text-sm text-muted">
             Nutrition documents that plans are built from

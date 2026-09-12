@@ -242,10 +242,10 @@ export default function CaptureView() {
 
         <footer className="text-center pt-8 space-y-2">
           <Link
-            href="/settings/guidance"
+            href="/settings"
             className="text-xs text-muted hover:text-foreground transition-colors inline-block"
           >
-            Guidance &amp; settings
+            Settings
           </Link>
           <p className="text-xs text-muted">Powered by AI vision analysis</p>
         </footer>

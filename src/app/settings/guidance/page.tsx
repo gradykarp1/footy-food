@@ -28,6 +28,8 @@ export default function GuidancePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -118,6 +120,25 @@ export default function GuidancePage() {
     }
   };
 
+  /** Resolves every approved rule, across all documents, into a new version. */
+  const publish = async () => {
+    setPublishing(true);
+    setError(null);
+    setPublished(null);
+    try {
+      const res = await fetch("/api/guidance/publish", { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Publish failed");
+      setPublished(
+        `Published v${body.version} — ${body.rules} rules, ${body.modifiers} modifiers.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Publish failed");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const handleDelete = async (doc: GuidanceDocument) => {
     setBusyId(doc.id);
     try {
@@ -164,6 +185,24 @@ export default function GuidancePage() {
             "Upload a PDF"
           )}
         </button>
+
+        {docs.length > 0 && (
+          <button
+            onClick={publish}
+            disabled={publishing}
+            className="w-full py-3 mb-4 bg-card border border-card-border rounded-xl text-sm font-medium text-foreground hover:border-accent/50 transition-colors disabled:opacity-50"
+          >
+            {publishing
+              ? "Publishing..."
+              : "Publish approved rules to the active ruleset"}
+          </button>
+        )}
+
+        {published && (
+          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 mb-4">
+            <p className="text-green-300 text-sm">{published}</p>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-4">

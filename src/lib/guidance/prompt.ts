@@ -40,4 +40,9 @@ HARD CONSTRAINTS
 
 IGNORE ENTIRELY — never emit these as context or rules: author biographies, welcome letters, "how to use this guide" or similar instructional preamble about the document itself, marketing copy, community-group or newsletter invitations, email addresses and links, page headers and footers, copyright lines.
 
-If a page contained a chart or figure whose numbers did not survive text extraction — garbled fragments, single characters on their own lines, stray digits, broken words — list it in low_confidence_pages so it can be re-read as an image. Do not guess at what a figure said.`;
+If a page contained a chart or figure whose numbers did not survive text extraction, list it in low_confidence_pages so it can be re-read as an image, and do not guess at what the figure said. The test is whether you can still recover the meaning:
+
+- Characters spaced out but in their original order ("5 0 % C o m p l e x C arbs") are readable. Extract the rule, quote the spaced text verbatim, and do NOT flag the page.
+- Fragments whose reading order is genuinely ambiguous ("omplex C" above "% C arb" above "50") are not. Flag the page.
+
+A page that is blank BY DESIGN is not a failed extraction. Worksheets, fill-in templates and planners legitimately contain headings and labels with no values under them — often mirroring a completed example earlier in the document. Do not flag those, and do not invent rules for them.`;

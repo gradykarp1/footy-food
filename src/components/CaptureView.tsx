@@ -51,7 +51,10 @@ export default function CaptureView() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to analyze image");
+        const message = errorData.error || "Failed to analyze image";
+        throw new Error(
+          errorData.detail ? `${message}\n\n${errorData.detail}` : message
+        );
       }
 
       const data: NutritionData = await response.json();
@@ -206,7 +209,9 @@ export default function CaptureView() {
 
               {error && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 text-center">
-                  <p className="text-red-400 text-sm">{error}</p>
+                  <p className="text-red-400 text-sm whitespace-pre-wrap break-words text-left">
+                    {error}
+                  </p>
                 </div>
               )}
 

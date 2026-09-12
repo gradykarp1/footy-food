@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { NUTRITION_SCHEMA } from "@/lib/nutritionSchema";
 
 const SYSTEM_PROMPT = `You are a sports nutrition assistant helping a young soccer athlete understand the nutritional content of their meals.
 
@@ -89,7 +90,13 @@ export async function POST(request: NextRequest) {
         // Sonnet 5 thinks by default, and max_tokens caps thinking + response
         // together, so the budget needs headroom beyond the JSON payload.
         max_tokens: 8000,
-        output_config: { effort: "low" },
+        output_config: {
+          effort: "low",
+          // Constrains the response to the schema. Without this the model can
+          // wrap its JSON in a markdown fence or open with a sentence, both of
+          // which break JSON.parse no matter what the prompt asks for.
+          format: { type: "json_schema", schema: NUTRITION_SCHEMA },
+        },
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -154,14 +161,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse the JSON response from Claude
+    // Parse the JSON response from Claude. output_config.format should make
+    // this unconditional, but strip a markdown fence first as a cheap guard.
+    const raw: string = textContent.text.trim();
+    const unfenced = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "");
+
     try {
-      const nutritionData = JSON.parse(textContent.text);
-      return NextResponse.json(nutritionData);
+      return NextResponse.json(JSON.parse(unfenced));
     } catch {
-      console.error("Failed to parse Claude response:", textContent.text);
+      console.error("Failed to parse Claude response:", raw);
       return NextResponse.json(
-        { error: "Invalid response format from API" },
+        {
+          error: "Analysis came back in an unexpected format. Try again.",
+          // Surfaced to the client so a failure on a phone is diagnosable
+          // without tailing server logs.
+          detail: raw.slice(0, 300),
+        },
         { status: 500 }
       );
     }

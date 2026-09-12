@@ -1,39 +1,77 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
-import { MealHistoryEntry } from "@/types/nutrition";
+import { createClient } from "@/lib/supabase/server";
+import {
+  MealContext,
+  MealHistoryEntry,
+  MealSource,
+  NutritionData,
+} from "@/types/nutrition";
 
-// Get Redis credentials (support multiple naming conventions)
-const redisUrl =
-  process.env.footy_food_KV_REST_API_URL ||
-  process.env.KV_REST_API_URL ||
-  process.env.UPSTASH_REDIS_REST_URL ||
-  "";
-const redisToken =
-  process.env.footy_food_KV_REST_API_TOKEN ||
-  process.env.KV_REST_API_TOKEN ||
-  process.env.UPSTASH_REDIS_REST_TOKEN ||
-  "";
+// Generous page size for the history view. There is deliberately no hard cap
+// on stored rows — the old 100-entry Redis ceiling made trends over arbitrary
+// ranges impossible.
+const DEFAULT_LIMIT = 200;
 
-// Initialize Redis client
-const redis = new Redis({
-  url: redisUrl,
-  token: redisToken,
-});
+interface MealLogRow {
+  id: string;
+  logged_at: string;
+  meal_context: MealContext;
+  source: MealSource;
+  image_thumb: string | null;
+  nutrition: NutritionData;
+}
 
-const HISTORY_KEY = "meal-history";
-const MAX_HISTORY_ITEMS = 100;
+function toEntry(row: MealLogRow): MealHistoryEntry {
+  return {
+    id: row.id,
+    timestamp: new Date(row.logged_at).getTime(),
+    mealContext: row.meal_context,
+    source: row.source,
+    imagePreview: row.image_thumb ?? undefined,
+    nutritionData: row.nutrition,
+  };
+}
 
-export async function GET() {
+/** Coerce a model-supplied value to a number, defaulting rather than throwing. */
+function num(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * The denormalized macro columns that Phase 5 aggregates over. Derived here
+ * rather than by a generated column so a non-numeric value from the model
+ * degrades to 0 instead of failing the insert and losing the meal.
+ */
+function macroColumns(nutrition: NutritionData) {
+  return {
+    calories: num(nutrition?.calories?.estimate),
+    protein_g: num(nutrition?.macronutrients?.protein_g),
+    carbs_g: num(nutrition?.macronutrients?.carbohydrates_g),
+    fat_g: num(nutrition?.macronutrients?.fat_g),
+  };
+}
+
+export async function GET(request: NextRequest) {
   try {
-    if (!redisUrl || !redisToken) {
+    const supabase = await createClient();
+    const limit = Number(request.nextUrl.searchParams.get("limit")) || DEFAULT_LIMIT;
+
+    const { data, error } = await supabase
+      .from("meal_log")
+      .select("id, logged_at, meal_context, source, image_thumb, nutrition")
+      .order("logged_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error("Failed to fetch history:", error);
       return NextResponse.json(
-        { error: "Database not configured" },
+        { error: "Failed to fetch history" },
         { status: 500 }
       );
     }
 
-    const history = await redis.lrange<MealHistoryEntry>(HISTORY_KEY, 0, -1);
-    return NextResponse.json(history || []);
+    return NextResponse.json((data ?? []).map(toEntry));
   } catch (error) {
     console.error("Failed to fetch history:", error);
     return NextResponse.json(
@@ -45,73 +83,101 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!redisUrl || !redisToken) {
-      return NextResponse.json(
-        { error: "Database not configured" },
-        { status: 500 }
-      );
+    const body = await request.json();
+    const { mealContext, nutritionData, imagePreview, source, timestamp } = body;
+
+    if (!mealContext || !nutritionData) {
+      return NextResponse.json({ error: "Invalid meal entry" }, { status: 400 });
     }
 
-    const entry: MealHistoryEntry = await request.json();
+    const supabase = await createClient();
 
-    // Validate entry
-    if (!entry.id || !entry.timestamp || !entry.nutritionData) {
+    const { data, error } = await supabase
+      .from("meal_log")
+      .insert({
+        meal_context: mealContext,
+        source: (source as MealSource) ?? "photo",
+        nutrition: nutritionData,
+        image_thumb: imagePreview ?? null,
+        // Only set when back-entering; otherwise the column default (now) wins.
+        ...(timestamp ? { logged_at: new Date(timestamp).toISOString() } : {}),
+        ...macroColumns(nutritionData),
+      })
+      .select("id, logged_at, meal_context, source, image_thumb, nutrition")
+      .single();
+
+    if (error) {
+      console.error("Failed to save meal:", error);
+      return NextResponse.json({ error: "Failed to save meal" }, { status: 500 });
+    }
+
+    // The id matters to the caller: re-analysis PATCHes this row rather than
+    // silently discarding the corrected result.
+    return NextResponse.json(toEntry(data as MealLogRow));
+  } catch (error) {
+    console.error("Failed to save meal:", error);
+    return NextResponse.json({ error: "Failed to save meal" }, { status: 500 });
+  }
+}
+
+/** Replace an existing meal's analysis — used when ingredients are corrected. */
+export async function PATCH(request: NextRequest) {
+  try {
+    const { id, nutritionData } = await request.json();
+
+    if (!id || !nutritionData) {
       return NextResponse.json(
-        { error: "Invalid meal entry" },
+        { error: "Missing meal id or nutrition data" },
         { status: 400 }
       );
     }
 
-    // Add to beginning of list (most recent first)
-    await redis.lpush(HISTORY_KEY, entry);
+    const supabase = await createClient();
 
-    // Trim to max items
-    await redis.ltrim(HISTORY_KEY, 0, MAX_HISTORY_ITEMS - 1);
+    const { data, error } = await supabase
+      .from("meal_log")
+      .update({ nutrition: nutritionData, ...macroColumns(nutritionData) })
+      .eq("id", id)
+      .select("id, logged_at, meal_context, source, image_thumb, nutrition")
+      .single();
 
-    return NextResponse.json({ success: true });
+    if (error) {
+      console.error("Failed to update meal:", error);
+      return NextResponse.json(
+        { error: "Failed to update meal" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(toEntry(data as MealLogRow));
   } catch (error) {
-    console.error("Failed to save meal:", error);
-    return NextResponse.json(
-      { error: "Failed to save meal" },
-      { status: 500 }
-    );
+    console.error("Failed to update meal:", error);
+    return NextResponse.json({ error: "Failed to update meal" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    if (!redisUrl || !redisToken) {
-      return NextResponse.json(
-        { error: "Database not configured" },
-        { status: 500 }
-      );
-    }
-
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
+    const id = request.nextUrl.searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json(
-        { error: "Missing meal ID" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing meal ID" }, { status: 400 });
     }
 
-    // Get all history
-    const history = await redis.lrange<MealHistoryEntry>(HISTORY_KEY, 0, -1);
+    const supabase = await createClient();
+    const { error } = await supabase.from("meal_log").delete().eq("id", id);
 
-    // Find and remove the entry with matching ID
-    const entryToRemove = history?.find((entry) => entry.id === id);
-    if (entryToRemove) {
-      await redis.lrem(HISTORY_KEY, 1, entryToRemove);
+    if (error) {
+      console.error("Failed to delete meal:", error);
+      return NextResponse.json(
+        { error: "Failed to delete meal" },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Failed to delete meal:", error);
-    return NextResponse.json(
-      { error: "Failed to delete meal" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete meal" }, { status: 500 });
   }
 }

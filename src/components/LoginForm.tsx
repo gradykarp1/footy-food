@@ -1,16 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
-interface LoginFormProps {
-  onSuccess: () => void;
-}
-
-export default function LoginForm({ onSuccess }: LoginFormProps) {
-  const [name, setName] = useState("");
-  const [pin, setPin] = useState("");
+export default function LoginForm() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,22 +17,21 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/auth", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name, pin }),
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (response.ok) {
-        // Store auth status in localStorage
-        localStorage.setItem("footy-food-auth", "true");
-        onSuccess();
-      } else {
-        const data = await response.json();
-        setError(data.error || "Login failed");
+      if (signInError) {
+        setError(signInError.message);
+        return;
       }
+
+      // refresh() re-runs the middleware so it sees the new session cookie
+      // before the push lands.
+      router.refresh();
+      router.push("/");
     } catch {
       setError("Connection error. Please try again.");
     } finally {
@@ -54,38 +52,37 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
-              htmlFor="name"
+              htmlFor="email"
               className="block text-sm font-medium text-muted mb-2"
             >
-              Name
+              Email
             </label>
             <input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter your name"
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
               required
               autoComplete="username"
+              autoCapitalize="none"
               className="w-full px-4 py-3 bg-card border border-card-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-accent transition-colors"
             />
           </div>
 
           <div>
             <label
-              htmlFor="pin"
+              htmlFor="password"
               className="block text-sm font-medium text-muted mb-2"
             >
-              PIN
+              Password
             </label>
             <input
-              id="pin"
+              id="password"
               type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              placeholder="Enter your PIN"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
               required
               autoComplete="current-password"
               className="w-full px-4 py-3 bg-card border border-card-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-accent transition-colors"
@@ -100,7 +97,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
 
           <button
             type="submit"
-            disabled={isLoading || !name || !pin}
+            disabled={isLoading || !email || !password}
             className="w-full py-3 bg-accent text-background rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-muted transition-colors flex items-center justify-center gap-2"
           >
             {isLoading ? (

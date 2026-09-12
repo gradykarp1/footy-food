@@ -57,10 +57,15 @@ export const MEAL_CONTEXTS: { value: MealContext; label: string }[] = [
   { value: "just-curious", label: "Just Curious" },
 ];
 
+// How the meal got logged. Manual and recipe entries arrive in Phase 5 and 3
+// respectively; photo is the only producer today.
+export type MealSource = "photo" | "manual" | "recipe";
+
 export interface MealHistoryEntry {
-  id: string;
-  timestamp: number;
+  id: string; // uuid, assigned by Postgres
+  timestamp: number; // ms epoch, maps to meal_log.logged_at
   mealContext: MealContext;
+  source: MealSource;
   imagePreview?: string; // Small thumbnail, optional to save space
   nutritionData: NutritionData;
 }

@@ -63,19 +63,41 @@ schedule_template    (id, day_of_week, activity, typical_start, duration_min)
                      -- default pattern; adjustable per-week at plan generation
 
 -- Guidance (three layers above)
+-- Revised 2026-09-12 after reading the actual source corpus; see
+-- "What the corpus forced" below for why each field looks like this.
 guidance_documents   (id, filename, storage_path, page_count, uploaded_at,
                       extraction_status, extracted_at)
-extracted_rules      (id, document_id, nutrient, target_value, unit,
-                      basis,           -- per_kg | absolute | percent_of_calories
-                      timing_window,   -- e.g. '-3h..-2h', 'post+30m'
-                      condition,       -- game_day | training_day | rest_day | any
+
+extracted_rules      (id, document_id,
+                      kind,            -- macro | hydration | plate_composition
+                      nutrient,        -- protein | carbohydrate | fat | fluid | ...
+                      value_min, value_max,  -- ranges are the norm, not the exception
+                      unit,            -- g | oz | ml | mg | percent
+                      basis,           -- per_kg | absolute | percent_of_plate
+                      anchor,          -- game | practice | none (applies all day)
+                      direction,       -- before | after | during | n/a
+                      offset_min_minutes, offset_max_minutes,
+                      condition,       -- base applicability
                       source_page, verbatim_quote, approved, edited)
+
+rule_modifiers       (id, extracted_rule_id,
+                      trigger,         -- duration_over_60m | heat | back_to_back_games
+                      value_min, value_max, unit,   -- the adjusted target
+                      note,            -- prose when the adjustment isn't numeric
+                      source_page, verbatim_quote)
+
+extracted_options    (id, document_id, slot, category, food, notes)
+                     -- "fast fuel, 30m pre-game", "recovery starters", plate
+                     -- categories. Structured because recipe generation and
+                     -- preference matching both consume it directly.
+
 extracted_context    (id, document_id, section_title, body, approved)
+
 active_ruleset       (id, version, created_at)
-active_rules         (id, ruleset_id, nutrient, target_value, unit, basis,
-                      timing_window, condition,
+active_rules         (id, ruleset_id, <same shape as extracted_rules>,
                       resolved_from,   -- extracted_rule ids this came from
                       resolution_note)
+active_rule_modifiers(id, active_rule_id, <same shape as rule_modifiers>)
 
 -- Preferences (versioned: new row per change)
 preferences          (id, version, created_at, likes[], dislikes[], allergies[],
@@ -110,6 +132,62 @@ meal_log             (id, logged_at, meal_context,
 Typed rules earn their keep twice: conflict detection at review, and a code-level
 **validation pass** on generated plans. A plan that comes back under the protein
 target gets flagged in `plans.validation` rather than shipping silently.
+
+### What the corpus forced
+
+The first schema was drafted before reading the source PDFs. Three things in
+them broke it:
+
+**Values are ranges, not scalars.** "20–30g of protein", "12–20 oz", "1–2 hours
+before", "4–8 oz", "30–60 minutes". A single `target_value` cannot hold these,
+and conflict detection becomes *interval overlap* rather than equality.
+
+**`basis` must not be part of the conflict key.** The documents express the same
+rule both ways — "1g of carbs per kg of body weight" and fixed gram amounts. Key
+on `basis` and a per-kg rule never gets compared against an absolute one, so a
+real contradiction passes review as two unrelated rules. Normalize to a common
+basis first, then compare.
+
+**Timing is an anchored offset, not a clock time or a free string.** Everything
+is relative to an event: "3–4 Hours Before Game", "Within 30 Minutes After
+Game", "30–60 minutes before training". "30 Minutes Before Game" and "within
+30–60 minutes pre-game" must collide, which a string comparison won't do. Hence
+`anchor` + `direction` + numeric offset bounds.
+
+**Conflict key: `(nutrient, anchor, direction)` with overlapping offset windows
+and matching conditions**, values normalized before comparison.
+
+**Duplicates are intra-document as well as cross-document.** A single source
+restates its own rules — the starter plan gives "keep protein and fat low
+pre-practice" on both page 4 and page 6. Review therefore merges within a
+document before comparing across them. Restatements are **surfaced as merge
+suggestions rather than auto-merged**: review happens once per document, so the
+extra clicks are cheap, and a silent merge that collapses a real distinction
+stays invisible until a generated plan is wrong.
+
+Two categories the first draft missed entirely:
+
+**Hydration is a first-class rule kind** with volume units. The original schema
+modeled macros and micronutrients and had nowhere to put "12–20 oz two to three
+hours before".
+
+**Conditional modifiers supersede base rules** rather than standing alongside
+them — playing over 60 minutes, playing in heat, under 60–90 minutes between
+games. Flattening these into independent rules would make the heat variant and
+the base rule look like a conflict when they aren't, and would silently
+mis-plan a tournament day.
+
+### Extraction channel
+
+All three source PDFs carry usable text layers (~58K characters total across 102
+pages), so extraction runs on `pdftotext` output and comfortably fits one
+request. This matters: the largest document is 187MB, which base64-encodes to
+~250MB against a 32MB API limit — it could never have been sent whole.
+
+Vision is a **targeted supplement**, not the primary channel. Text extraction
+degrades predictably on figures — the starter plan's 50/25/25 plate chart comes
+out as scrambled fragments — so pages carrying numbers inside graphics get
+rendered individually with `pdftoppm` and sent as images.
 
 ### Routes
 
@@ -273,7 +351,10 @@ expensive.
 
 Things I'd most like pushback on:
 
-1. **Rule granularity** — is `(nutrient, basis, timing_window, condition)` the right key for a rule? It determines what counts as a conflict. Too coarse and unrelated rules collide; too fine and real contradictions slip through.
+1. ~~**Rule granularity**~~ — RESOLVED 2026-09-12 after reading the corpus. Key is
+   `(nutrient, anchor, direction)` with interval overlap on offsets; `basis` is
+   normalized rather than keyed on. Conditional modifiers are first-class. See
+   "What the corpus forced" above.
 2. **Schedule template vs. per-week entry** — I've assumed a default weekly pattern you adjust when generating. If practices are too irregular for a template to help, per-week entry only is simpler.
 3. **Phase 5 placement** — intake review is independent of plans and could run parallel to Phase 2–4 if it's the feature you'd use soonest.
 4. **Recipe chat scope** — currently one chat thread per plan. Alternative is a single long-running kitchen conversation not tied to any plan.

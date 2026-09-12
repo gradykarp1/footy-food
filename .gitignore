@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# Source nutrition PDFs — copyrighted, and far too large to track
+nutritional_information/

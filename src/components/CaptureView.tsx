@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { MEAL_CONTEXTS, MealContext, NutritionData } from "@/types/nutrition";
 import {
   ImageData,
@@ -239,7 +240,13 @@ export default function CaptureView() {
           )}
         </div>
 
-        <footer className="text-center pt-8">
+        <footer className="text-center pt-8 space-y-2">
+          <Link
+            href="/settings/guidance"
+            className="text-xs text-muted hover:text-foreground transition-colors inline-block"
+          >
+            Guidance &amp; settings
+          </Link>
           <p className="text-xs text-muted">Powered by AI vision analysis</p>
         </footer>
       </div>

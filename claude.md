@@ -41,7 +41,7 @@ Build a mobile-first web application that allows a young soccer athlete to photo
 |---|---|---|
 | Framework | **Vanilla HTML/CSS/JS** (single file to start) or **React (Vite)** | Keep it simple; upgrade to React if state complexity grows |
 | Styling | **Tailwind CSS** (CDN) | Rapid mobile-first UI |
-| API | **Anthropic Claude API** (`claude-sonnet-4-20250514`) | Vision + nutrition knowledge |
+| API | **Anthropic Claude API** (`claude-sonnet-5`) | Vision + nutrition knowledge |
 | Hosting | **Vercel** | Free tier, auto HTTPS (required for camera on iOS) |
 | Storage | **localStorage** | Meal history, no backend needed for MVP |
 | Version Control | **Github** |
@@ -83,8 +83,13 @@ POST https://api.anthropic.com/v1/messages
 
 ### Model
 ```
-claude-sonnet-4-20250514
+claude-sonnet-5
 ```
+
+> Sonnet 5 runs adaptive thinking by default, and `max_tokens` caps thinking and
+> response text together — keep a generous budget so the JSON isn't truncated.
+> `output_config.effort` defaults to `high`; the app sets `low` to keep the
+> capture→result path fast.
 
 ### Image Handling
 - Accept JPEG/PNG from file input

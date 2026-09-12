@@ -85,8 +85,11 @@ export async function POST(request: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1500,
+        model: "claude-sonnet-5",
+        // Sonnet 5 thinks by default, and max_tokens caps thinking + response
+        // together, so the budget needs headroom beyond the JSON payload.
+        max_tokens: 8000,
+        output_config: { effort: "low" },
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -120,6 +123,24 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
+
+    // Truncation and refusals both produce unparseable output — report them
+    // distinctly instead of as a generic format error.
+    if (data.stop_reason === "max_tokens") {
+      console.error("Response truncated — max_tokens too low");
+      return NextResponse.json(
+        { error: "Analysis got cut off. Give it another try." },
+        { status: 500 }
+      );
+    }
+
+    if (data.stop_reason === "refusal") {
+      console.error("Request refused:", data.stop_details);
+      return NextResponse.json(
+        { error: "Couldn't analyze that photo. Try a different shot." },
+        { status: 400 }
+      );
+    }
 
     // Extract the text content from Claude's response
     const textContent = data.content?.find(

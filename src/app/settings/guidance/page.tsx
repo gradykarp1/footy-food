@@ -194,6 +194,15 @@ export default function GuidancePage() {
         </button>
 
         {docs.length > 0 && (
+          <Link
+            href="/settings/guidance/rationalize"
+            className="block w-full py-3 mb-3 bg-card border border-card-border rounded-xl text-sm font-medium text-foreground text-center hover:border-accent/50 transition-colors"
+          >
+            Rationalize duplicate rules
+          </Link>
+        )}
+
+        {docs.length > 0 && (
           <button
             onClick={publish}
             disabled={publishing}

@@ -352,8 +352,10 @@ export default function ProfilePage() {
                 Typical week
               </h3>
               <p className="text-xs text-muted mt-0.5 mb-3">
-                A default pattern, not a fixture list. You can adjust any
-                individual week when generating a plan.
+                A default pattern, not a fixture list — you can adjust any
+                individual week when generating a plan. Times use your device
+                clock, so they show as AM/PM here and are stored on a 24-hour
+                clock.
               </p>
 
               <div className="space-y-2">
@@ -381,51 +383,79 @@ export default function ProfilePage() {
                       ) : (
                         <div className="space-y-2 mt-2">
                           {entries.map((e) => (
-                            <div key={e.id} className="flex gap-2 items-center">
-                              <select
-                                value={e.activity}
-                                onChange={(ev) =>
-                                  updateEntry(e.id, { activity: ev.target.value })
-                                }
-                                className="flex-1 px-2 py-1.5 bg-background border border-card-border rounded-lg text-xs text-foreground"
-                              >
-                                {ACTIVITIES.map((a) => (
-                                  <option key={a} value={a}>
-                                    {a}
-                                  </option>
-                                ))}
-                              </select>
-                              <input
-                                type="time"
-                                value={e.start_time?.slice(0, 5) ?? ""}
-                                onChange={(ev) =>
-                                  updateEntry(e.id, {
-                                    start_time: ev.target.value || null,
-                                  })
-                                }
-                                className="px-2 py-1.5 bg-background border border-card-border rounded-lg text-xs text-foreground"
-                              />
-                              <input
-                                type="number"
-                                value={e.duration_minutes ?? ""}
-                                onChange={(ev) =>
-                                  updateEntry(e.id, {
-                                    duration_minutes:
-                                      ev.target.value === ""
-                                        ? null
-                                        : Number(ev.target.value),
-                                  })
-                                }
-                                placeholder="min"
-                                className="w-16 px-2 py-1.5 bg-background border border-card-border rounded-lg text-xs text-foreground placeholder:text-muted"
-                              />
-                              <button
-                                onClick={() => removeEntry(e.id)}
-                                className="text-muted hover:text-red-400 transition-colors px-1"
-                                aria-label="Remove"
-                              >
-                                ×
-                              </button>
+                            <div
+                              key={e.id}
+                              className="bg-background border border-card-border rounded-lg p-2.5 space-y-2"
+                            >
+                              <div className="flex gap-2 items-center">
+                                <label className="flex-1">
+                                  <span className="text-[11px] text-muted block mb-1">
+                                    Activity
+                                  </span>
+                                  <select
+                                    value={e.activity}
+                                    onChange={(ev) =>
+                                      updateEntry(e.id, {
+                                        activity: ev.target.value,
+                                      })
+                                    }
+                                    className="w-full px-2 py-1.5 bg-card border border-card-border rounded-lg text-sm text-foreground capitalize"
+                                  >
+                                    {ACTIVITIES.map((a) => (
+                                      <option key={a} value={a}>
+                                        {a}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <button
+                                  onClick={() => removeEntry(e.id)}
+                                  className="self-end px-2 py-1.5 text-muted hover:text-red-400 transition-colors text-sm"
+                                  aria-label={`Remove ${e.activity} on ${DAYS[e.day_of_week]}`}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <label className="flex-1">
+                                  <span className="text-[11px] text-muted block mb-1">
+                                    Start time
+                                  </span>
+                                  <input
+                                    type="time"
+                                    value={e.start_time?.slice(0, 5) ?? ""}
+                                    onChange={(ev) =>
+                                      updateEntry(e.id, {
+                                        start_time: ev.target.value || null,
+                                      })
+                                    }
+                                    className="w-full px-2 py-1.5 bg-card border border-card-border rounded-lg text-sm text-foreground"
+                                  />
+                                </label>
+                                <label className="flex-1">
+                                  <span className="text-[11px] text-muted block mb-1">
+                                    Length (minutes)
+                                  </span>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    step={5}
+                                    value={e.duration_minutes ?? ""}
+                                    onChange={(ev) =>
+                                      updateEntry(e.id, {
+                                        duration_minutes:
+                                          ev.target.value === ""
+                                            ? null
+                                            : Number(ev.target.value),
+                                      })
+                                    }
+                                    placeholder="90"
+                                    className="w-full px-2 py-1.5 bg-card border border-card-border rounded-lg text-sm text-foreground placeholder:text-muted"
+                                  />
+                                </label>
+                              </div>
                             </div>
                           ))}
                         </div>

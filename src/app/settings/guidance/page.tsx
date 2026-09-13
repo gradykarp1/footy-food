@@ -126,12 +126,19 @@ export default function GuidancePage() {
     setError(null);
     setPublished(null);
     try {
-      const res = await fetch("/api/guidance/publish", { method: "POST" });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Publish failed");
+      // A single transaction in Postgres. Doing this as a sequence of REST
+      // calls from a route handler was neither atomic nor fast: a timeout
+      // partway through left an empty ruleset as the newest version.
+      const supabase = createClient();
+      const { data, error: rpcError } = await supabase
+        .rpc("publish_ruleset")
+        .single<{ version: number; rule_count: number; modifier_count: number }>();
+
+      if (rpcError) throw new Error(rpcError.message);
       setPublished(
-        `Published v${body.version} — ${body.rules} rules, ${body.modifiers} modifiers.`
+        `Published v${data.version} — ${data.rule_count} rules, ${data.modifier_count} modifiers.`
       );
+      await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Publish failed");
     } finally {

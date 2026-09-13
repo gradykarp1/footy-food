@@ -349,14 +349,32 @@ Absolute constraints:
 
 Tone: you are writing for a parent and a teenager, not a clinician. Be concrete about foods and portions. Never frame anything as restriction or as a warning about weight — focus on what to add and why it helps him play better.`;
 
+/**
+ * Both knobs are environment variables so they can be tuned from the Supabase
+ * dashboard without redeploying. This has needed several rounds of adjustment
+ * already, and each redeploy is a chance to break something unrelated.
+ *
+ * A complete weekly plan measured at 8.4k output tokens: 3.3k thinking, 5.1k
+ * content. The ceiling is not a target. It is headroom, because thinking
+ * varies enormously between identical runs and on Sonnet 5 max_tokens caps
+ * thinking and response TOGETHER -- at 16k a heavy thinking run collided with
+ * it and truncated the plan mid-week.
+ *
+ * Raising it too far trades one failure for another: an overrun that would
+ * have truncated cleanly instead runs into the 150s function ceiling, which
+ * reports as an opaque 546.
+ */
+const MAX_TOKENS = Number(Deno.env.get("PLAN_MAX_TOKENS") ?? 24000);
+const EFFORT = Deno.env.get("PLAN_EFFORT") ?? "medium";
+
 async function callModel(apiKey: string, context: string, request: string, schema: unknown) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: "claude-sonnet-5",
-      max_tokens: 16000,
-      output_config: { effort: "medium", format: { type: "json_schema", schema } },
+      max_tokens: MAX_TOKENS,
+      output_config: { effort: EFFORT, format: { type: "json_schema", schema } },
       system: [
         { type: "text", text: SHARED_RULES },
         // Stable across every plan; cached so repeat generations are cheaper.
@@ -443,6 +461,8 @@ Deno.serve(async (req) => {
       options_total: (optionsRes.data ?? []).length,
       options_used: condensed.length,
       context_chars: context.length,
+      max_tokens: MAX_TOKENS,
+      effort: EFFORT,
       elapsed_ms: Date.now() - startedAt,
     }));
 
@@ -466,7 +486,7 @@ ${notes ? `\nContext for this week: ${notes}` : ""}
 
 Cover every day, including rest days. Match each day's meals to what that day actually demands — a day with an evening practice is fuelled differently from a rest day, and a game day follows the game-day timing from the guidance rather than a generic template.
 
-Mark batch_prep true for anything that can be made in bulk at the weekend, and use batch_prep_plan to say what to cook when. He is a capable teenager cooking for himself on weeknights, so weekday items should be assemble-not-cook wherever the guidance allows.`;
+Keep each meal's description to one or two sentences. Mark batch_prep true for anything that can be made in bulk at the weekend, and use batch_prep_plan to say what to cook when. He is a capable teenager cooking for himself on weeknights, so weekday items should be assemble-not-cook wherever the guidance allows.`;
 
     const { plan, usage } = await callModel(
       apiKey, context, request,

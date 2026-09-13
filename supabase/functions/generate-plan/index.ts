@@ -139,6 +139,35 @@ function describeRule(rule: Row, weightKg: number | null): string {
   return `- ${rule.nutrient}: ${range} ${rule.unit ?? ""}, ${when}${scope}`;
 }
 
+/**
+ * Trims the food lists before they reach the prompt.
+ *
+ * Extraction produced 361 options across 43 slot names, because three
+ * documents label the same moment differently ("FAST FUEL", "30 Minutes
+ * Before Game", "Pre-Game Snacks"). Reconciling those is reasoning the model
+ * has to do before it writes anything, and it was a major part of why
+ * generation overran. Keep the slots that carry real variety, cap each one,
+ * and drop the long tail.
+ */
+function condenseOptions(options: Row[], maxSlots = 14, maxPerSlot = 8): Row[] {
+  const bySlot = new Map<string, Row[]>();
+  const seen = new Set<string>();
+
+  for (const o of options) {
+    const key = `${o.slot}|${o.food.toLowerCase().trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const list = bySlot.get(o.slot) ?? [];
+    if (list.length < maxPerSlot) list.push(o);
+    bySlot.set(o.slot, list);
+  }
+
+  return [...bySlot.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, maxSlots)
+    .flatMap(([, list]) => list);
+}
+
 function buildContext(
   rules: Row[],
   modifiers: Row[],
@@ -327,7 +356,7 @@ async function callModel(apiKey: string, context: string, request: string, schem
     body: JSON.stringify({
       model: "claude-sonnet-5",
       max_tokens: 16000,
-      output_config: { effort: "high", format: { type: "json_schema", schema } },
+      output_config: { effort: "medium", format: { type: "json_schema", schema } },
       system: [
         { type: "text", text: SHARED_RULES },
         // Stable across every plan; cached so repeat generations are cheaper.
@@ -350,6 +379,7 @@ async function callModel(apiKey: string, context: string, request: string, schem
 // ---------------------------------------------------------------- handler
 
 Deno.serve(async (req) => {
+  const startedAt = Date.now();
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   try {
@@ -394,8 +424,27 @@ Deno.serve(async (req) => {
       .from("active_rule_modifiers").select("*")
       .in("active_rule_id", (rules ?? []).map((r: Row) => r.id));
 
-    const context = buildContext(rules ?? [], modifiers ?? [], profile, prefsRes.data, optionsRes.data ?? []);
+    // A game-day plan cannot use practice-anchored rules. Passing them means
+    // the model reasons about 15 rules it must then discard.
+    const allRules = rules ?? [];
+    const relevantRules = type === "game_day"
+      ? allRules.filter((r: Row) => r.anchor === "game" || r.anchor === "none")
+      : allRules;
+
+    const condensed = condenseOptions(optionsRes.data ?? []);
+    const context = buildContext(relevantRules, modifiers ?? [], profile, prefsRes.data, condensed);
     const weight = Number(profile.weight_kg);
+
+    console.log(JSON.stringify({
+      stage: "context_built",
+      type,
+      rules_total: allRules.length,
+      rules_used: relevantRules.length,
+      options_total: (optionsRes.data ?? []).length,
+      options_used: condensed.length,
+      context_chars: context.length,
+      elapsed_ms: Date.now() - startedAt,
+    }));
 
     const request = type === "game_day"
       ? `Build a game-day fuelling plan.
@@ -424,9 +473,11 @@ Mark batch_prep true for anything that can be made in bulk at the weekend, and u
       type === "game_day" ? GAME_DAY_SCHEMA : WEEKLY_SCHEMA,
     );
 
+    console.log(JSON.stringify({ stage: "model_done", elapsed_ms: Date.now() - startedAt, usage }));
+
     const findings = type === "game_day"
-      ? validateGameDay(plan, rules ?? [], weight)
-      : validateWeekly(plan, rules ?? [], weight);
+      ? validateGameDay(plan, allRules, weight)
+      : validateWeekly(plan, allRules, weight);
 
     const { data: saved, error: saveErr } = await supabase
       .from("plans")
@@ -444,9 +495,10 @@ Mark batch_prep true for anything that can be made in bulk at the weekend, and u
       .single();
 
     if (saveErr) return json({ error: saveErr.message }, 500);
+    console.log(JSON.stringify({ stage: "done", elapsed_ms: Date.now() - startedAt, findings: findings.length }));
     return json({ id: saved.id, findings, usage });
   } catch (err) {
-    console.error("generate-plan failed:", err);
+    console.error(JSON.stringify({ stage: "failed", elapsed_ms: Date.now() - startedAt, error: String(err) }));
     return json({ error: err instanceof Error ? err.message : "Plan generation failed" }, 502);
   }
 });

@@ -26,6 +26,28 @@ interface ScheduleEntry {
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ACTIVITIES = ["practice", "game", "rest", "other"];
 
+// Weight and height are always STORED in kg and cm: the guidance is written in
+// per-kilogram terms and resolving those against a converted number would put a
+// rounding step between the rule and the plan. Imperial is a display choice
+// only, converted at the input boundary.
+const KG_PER_LB = 0.45359237;
+const CM_PER_IN = 2.54;
+const UNITS_KEY = "footy-food-units";
+
+type UnitSystem = "metric" | "imperial";
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+function toDisplayWeight(kg: number | null, units: UnitSystem): string {
+  if (kg === null) return "";
+  return units === "metric" ? String(round1(kg)) : String(round1(kg / KG_PER_LB));
+}
+
+function toDisplayHeight(cm: number | null, units: UnitSystem): string {
+  if (cm === null) return "";
+  return units === "metric" ? String(round1(cm)) : String(round1(cm / CM_PER_IN));
+}
+
 const EMPTY: Profile = {
   name: "",
   birthdate: null,
@@ -42,9 +64,18 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [units, setUnits] = useState<UnitSystem>("metric");
+  // Input strings are held separately from the canonical profile so that
+  // switching units never round-trips a stored value through two conversions.
+  const [weightInput, setWeightInput] = useState("");
+  const [heightInput, setHeightInput] = useState("");
 
   useEffect(() => {
     let cancelled = false;
+    const stored = localStorage.getItem(UNITS_KEY);
+    const startUnits: UnitSystem = stored === "imperial" ? "imperial" : "metric";
+    setUnits(startUnits);
+
     (async () => {
       const supabase = createClient();
       const [p, s] = await Promise.all([
@@ -52,7 +83,12 @@ export default function ProfilePage() {
         supabase.from("schedule_template").select("*").order("day_of_week"),
       ]);
       if (cancelled) return;
-      if (p.data) setProfile(p.data as Profile);
+      if (p.data) {
+        const loaded = p.data as Profile;
+        setProfile(loaded);
+        setWeightInput(toDisplayWeight(loaded.weight_kg, startUnits));
+        setHeightInput(toDisplayHeight(loaded.height_cm, startUnits));
+      }
       setSchedule((s.data as ScheduleEntry[]) ?? []);
       setIsLoading(false);
     })();
@@ -60,6 +96,42 @@ export default function ProfilePage() {
       cancelled = true;
     };
   }, []);
+
+  /** Re-renders the inputs in the new unit. Canonical values are untouched. */
+  const switchUnits = (next: UnitSystem) => {
+    setUnits(next);
+    localStorage.setItem(UNITS_KEY, next);
+    setWeightInput(toDisplayWeight(profile.weight_kg, next));
+    setHeightInput(toDisplayHeight(profile.height_cm, next));
+  };
+
+  const onWeightChange = (raw: string) => {
+    setWeightInput(raw);
+    const n = raw === "" ? null : Number(raw);
+    setProfile({
+      ...profile,
+      weight_kg:
+        n === null || Number.isNaN(n)
+          ? null
+          : units === "metric"
+            ? n
+            : round1(n * KG_PER_LB * 100) / 100,
+    });
+  };
+
+  const onHeightChange = (raw: string) => {
+    setHeightInput(raw);
+    const n = raw === "" ? null : Number(raw);
+    setProfile({
+      ...profile,
+      height_cm:
+        n === null || Number.isNaN(n)
+          ? null
+          : units === "metric"
+            ? n
+            : Math.round(n * CM_PER_IN * 10) / 10,
+    });
+  };
 
   const saveProfile = async () => {
     setSaving(true);
@@ -156,33 +228,55 @@ export default function ProfilePage() {
                 />
               </label>
 
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted">Units</span>
+                <div className="flex rounded-lg overflow-hidden border border-card-border">
+                  {(
+                    [
+                      ["imperial", "lb / in"],
+                      ["metric", "kg / cm"],
+                    ] as [UnitSystem, string][]
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => switchUnits(value)}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                        units === value
+                          ? "bg-accent text-background"
+                          : "bg-background text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 <label className="flex-1">
-                  <span className="text-xs text-muted block mb-1">Weight (kg)</span>
+                  <span className="text-xs text-muted block mb-1">
+                    Weight ({units === "metric" ? "kg" : "lb"})
+                  </span>
                   <input
                     type="number"
                     step="0.1"
-                    value={profile.weight_kg ?? ""}
-                    onChange={(e) =>
-                      setProfile({
-                        ...profile,
-                        weight_kg: e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
+                    inputMode="decimal"
+                    value={weightInput}
+                    onChange={(e) => onWeightChange(e.target.value)}
                     className={field}
                   />
                 </label>
                 <label className="flex-1">
-                  <span className="text-xs text-muted block mb-1">Height (cm)</span>
+                  <span className="text-xs text-muted block mb-1">
+                    Height ({units === "metric" ? "cm" : "in"})
+                  </span>
                   <input
                     type="number"
-                    value={profile.height_cm ?? ""}
-                    onChange={(e) =>
-                      setProfile({
-                        ...profile,
-                        height_cm: e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
+                    step="0.1"
+                    inputMode="decimal"
+                    value={heightInput}
+                    onChange={(e) => onHeightChange(e.target.value)}
                     className={field}
                   />
                 </label>
@@ -192,6 +286,9 @@ export default function ProfilePage() {
                 Weight drives every per-kilogram rule in the guidance, so keep it
                 current as he grows. Plans record the weight they were built
                 against.
+                {units === "imperial" && profile.weight_kg !== null && (
+                  <> Stored as {round1(profile.weight_kg)} kg.</>
+                )}
               </p>
 
               <div className="flex gap-2">

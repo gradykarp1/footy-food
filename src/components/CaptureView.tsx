@@ -241,12 +241,20 @@ export default function CaptureView() {
         </div>
 
         <footer className="text-center pt-8 space-y-2">
-          <Link
-            href="/settings"
-            className="text-xs text-muted hover:text-foreground transition-colors inline-block"
-          >
-            Settings
-          </Link>
+          <div className="flex justify-center gap-4">
+            <Link
+              href="/plans"
+              className="text-xs text-muted hover:text-foreground transition-colors"
+            >
+              Plans
+            </Link>
+            <Link
+              href="/settings"
+              className="text-xs text-muted hover:text-foreground transition-colors"
+            >
+              Settings
+            </Link>
+          </div>
           <p className="text-xs text-muted">Powered by AI vision analysis</p>
         </footer>
       </div>

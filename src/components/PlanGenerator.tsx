@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   type: "game_day" | "weekly";
@@ -26,28 +27,33 @@ export default function PlanGenerator({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/plans/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, notes: notes.trim() || undefined, ...payload }),
-      });
+      // Runs on Supabase Edge Functions, not Vercel. Measured at 50-95s
+      // against the real ruleset, which a Vercel Hobby function (60s ceiling)
+      // cannot hold open.
+      const supabase = createClient();
+      const { data, error: fnError } = await supabase.functions.invoke(
+        "generate-plan",
+        { body: { type, notes: notes.trim() || undefined, ...payload } }
+      );
 
-      // High-effort planning can run long; a timeout arrives as an HTML error
-      // page, which would otherwise surface as an unreadable parse error.
-      const raw = await res.text();
-      let body: { id?: string; error?: string };
-      try {
-        body = JSON.parse(raw);
-      } catch {
-        throw new Error(
-          res.status === 504 || /timed out|TIMEOUT/i.test(raw)
-            ? "Generation took longer than the server allows. Try again — plans are usually faster on a second attempt."
-            : `Server returned ${res.status}. ${raw.slice(0, 200)}`
-        );
+      if (fnError) {
+        // A non-2xx from an edge function arrives as an opaque error; the
+        // useful message is in the response body.
+        let detail = fnError.message;
+        const ctx = (fnError as { context?: Response }).context;
+        if (ctx && typeof ctx.json === "function") {
+          try {
+            const parsed = await ctx.json();
+            if (parsed?.error) detail = parsed.error;
+          } catch {
+            // Body wasn't JSON — keep the original message.
+          }
+        }
+        throw new Error(detail);
       }
 
-      if (!res.ok) throw new Error(body.error || "Could not generate the plan");
-      router.push(`/plans/${body.id}`);
+      if (!data?.id) throw new Error("Plan was generated but not saved.");
+      router.push(`/plans/${data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate the plan");
       setBusy(false);
